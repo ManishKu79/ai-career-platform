@@ -1,13 +1,17 @@
 # backend/main.py
 
 from contextlib import asynccontextmanager
+from datetime import datetime
 import logging
+import time
 
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 
 from backend.config import settings
 from backend.database import db_manager
 
+# Routers
 from backend.routers import (
     upload,
     nlp,
@@ -15,8 +19,17 @@ from backend.routers import (
     jobs,
     scoring,
     candidates,
-    admin
+    admin,
+    pipeline,
 )
+
+# Middleware
+from backend.middleware.cors import configure_cors
+from backend.middleware.logging_middleware import (
+    RequestIDMiddleware,
+    TimingMiddleware,
+)
+from backend.middleware.error_handler import register_exception_handlers
 
 # --------------------------------------------------
 # Logging Configuration
@@ -24,41 +37,31 @@ from backend.routers import (
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s"
 )
 
 logger = logging.getLogger(__name__)
 
+APP_START_TIME = time.time()
+
 # --------------------------------------------------
-# Application Lifespan
+# Lifespan
 # --------------------------------------------------
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    FastAPI lifespan handler.
 
-    Startup:
-        - Connect MongoDB
-        - Create indexes
-
-    Shutdown:
-        - Close MongoDB connection
-    """
-
-    logger.info("Starting AI Career Intelligence Platform API...")
+    logger.info("Starting AI Career Intelligence Platform...")
 
     try:
         # Connect database
         db_manager.connect()
 
-        # Initialize indexes if implemented
+        # Initialize indexes if available
         if hasattr(db_manager, "initialize_indexes"):
             await db_manager.initialize_indexes()
 
-        logger.info(
-            "Database connected and indexes initialized successfully."
-        )
+        logger.info("Database connected successfully")
 
     except Exception as e:
         logger.exception(f"Startup failed: {e}")
@@ -66,70 +69,147 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    logger.info("Shutting down API...")
+    logger.info("Shutting down application...")
 
     try:
         db_manager.disconnect()
-        logger.info("Database connection closed.")
+        logger.info("Database disconnected")
 
     except Exception as e:
         logger.exception(f"Shutdown error: {e}")
 
 # --------------------------------------------------
-# FastAPI Application
+# FastAPI App
 # --------------------------------------------------
 
 app = FastAPI(
     title="AI Career Intelligence Platform",
+    version="1.0.0",
     description="""
-Production-grade ATS and Candidate Intelligence Platform.
+AI-powered ATS and Candidate Ranking Platform
 
 Features:
-- Resume Upload & Parsing
+- Resume Upload
 - NLP Processing
 - Skill Extraction
 - ATS Scoring
 - Candidate Ranking
-- Job Management
-- Analytics Dashboard
-- Admin Operations
+- Admin Analytics
 """,
-    version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
+
+# --------------------------------------------------
+# Middleware Registration
+# --------------------------------------------------
+
+configure_cors(app)
+
+app.add_middleware(RequestIDMiddleware)
+app.add_middleware(TimingMiddleware)
+
+register_exception_handlers(app)
 
 # --------------------------------------------------
 # Router Registration
 # --------------------------------------------------
 
-app.include_router(upload.router, prefix="/api/v1")
-app.include_router(nlp.router, prefix="/api/v1")
-app.include_router(skills.router, prefix="/api/v1")
-app.include_router(jobs.router, prefix="/api/v1")
-app.include_router(scoring.router, prefix="/api/v1")
-app.include_router(candidates.router, prefix="/api/v1")
-app.include_router(admin.router, prefix="/api/v1")
+API_PREFIX = "/api/v1"
+
+app.include_router(upload.router, prefix=API_PREFIX)
+app.include_router(nlp.router, prefix=API_PREFIX)
+app.include_router(skills.router, prefix=API_PREFIX)
+app.include_router(jobs.router, prefix=API_PREFIX)
+app.include_router(scoring.router, prefix=API_PREFIX)
+app.include_router(candidates.router, prefix=API_PREFIX)
+app.include_router(admin.router, prefix=API_PREFIX)
+app.include_router(pipeline.router, prefix=API_PREFIX)
 
 # --------------------------------------------------
-# System Endpoints
+# Root Endpoint
 # --------------------------------------------------
 
 @app.get("/", tags=["System"])
 async def root():
     return {
-        "message": "AI Career Intelligence Platform API",
+        "service": "AI Career Intelligence Platform",
         "version": "1.0.0",
         "docs": "/docs",
-        "health": "/health"
+        "health": "/health",
+        "ready": "/ready",
     }
 
+# --------------------------------------------------
+# Health Check
+# --------------------------------------------------
 
 @app.get("/health", tags=["System"])
-async def health_check():
+async def health():
+
+    uptime = int(time.time() - APP_START_TIME)
+
     return {
-        "status": "healthy",
-        "service": "AI Career Intelligence Platform",
-        "version": "1.0.0"
+        "status": "alive",
+        "uptime_s": uptime,
+        "timestamp": datetime.utcnow().isoformat(),
+        "service": "ai-career-platform",
+        "version": "1.0.0",
+    }
+
+# --------------------------------------------------
+# Readiness Check
+# --------------------------------------------------
+
+@app.get("/ready", tags=["System"])
+async def ready():
+
+    try:
+
+        if hasattr(db_manager, "ping"):
+            is_ready = await db_manager.ping()
+
+            if not is_ready:
+                return JSONResponse(
+                    status_code=503,
+                    content={
+                        "status": "not_ready",
+                        "database": "unreachable",
+                    }
+                )
+
+        return {
+            "status": "ready",
+            "database": "connected",
+        }
+
+    except Exception as e:
+
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "not_ready",
+                "error": str(e),
+            }
+        )
+
+# --------------------------------------------------
+# Metrics Endpoint
+# --------------------------------------------------
+
+@app.get("/metrics", tags=["System"])
+async def metrics():
+
+    uptime = int(time.time() - APP_START_TIME)
+
+    return {
+        "uptime_seconds": uptime,
+        "environment": {
+            "api_host": settings.API_HOST,
+            "api_port": settings.API_PORT,
+            "spacy_model": settings.SPACY_MODEL,
+            "ats_threshold": settings.ATS_SCORE_THRESHOLD,
+            "max_file_size_mb": settings.MAX_FILE_SIZE_MB,
+        }
     }
 
 # --------------------------------------------------
@@ -143,5 +223,6 @@ if __name__ == "__main__":
         "backend.main:app",
         host=settings.API_HOST,
         port=settings.API_PORT,
-        reload=settings.API_RELOAD
+        reload=settings.API_RELOAD,
+        log_level="info",
     )
