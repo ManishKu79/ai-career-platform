@@ -19,6 +19,9 @@ from backend.routers import upload, nlp
 
 from backend.routers import upload, nlp, skills
 
+# Add to imports in backend/main.py
+from backend.routers import upload, nlp, skills, jobs, scoring
+
 # Logging
 import logging
 
@@ -85,6 +88,8 @@ app = FastAPI(
 app.include_router(upload.router, prefix="/api/v1")
 app.include_router(nlp.router, prefix="/api/v1")
 app.include_router(skills.router, prefix="/api/v1")
+app.include_router(jobs.router,    prefix="/api/v1")
+app.include_router(scoring.router, prefix="/api/v1")
 
 
 # ── Health Check Endpoint ─────────────────────────────────────────────
