@@ -1,0 +1,109 @@
+# docker/Dockerfile.streamlit
+
+# ═══════════════════════════════════════════════════════════════════════
+# STAGE 1: BUILDER
+# Installs Streamlit and frontend dependencies
+# ═══════════════════════════════════════════════════════════════════════
+
+FROM python:3.11 AS builder
+
+WORKDIR /build
+
+# Streamlit-specific requirements (subset of full requirements.txt)
+# We create a minimal requirements file for the frontend to avoid
+# installing heavy NLP packages (spaCy, NLTK) that aren't needed
+COPY requirements.txt .
+
+# Install only frontend-relevant packages
+# grep: filters requirements.txt to only frontend packages
+# This creates a streamlit-only requirements subset
+RUN pip install --user --no-cache-dir \
+    streamlit==1.35.0 \
+    requests==2.31.0 \
+    plotly==5.22.0 \
+    pandas==2.2.2 \
+    numpy==1.26.4
+
+# ═══════════════════════════════════════════════════════════════════════
+# STAGE 2: RUNTIME
+# ═══════════════════════════════════════════════════════════════════════
+
+FROM python:3.11-slim AS runtime
+
+# Runtime system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Non-root user for security
+RUN groupadd --gid 1001 appgroup && \
+    useradd  --uid 1001 --gid appgroup \
+    --shell /bin/bash --create-home appuser
+
+WORKDIR /app
+
+# Copy installed packages from builder
+COPY --from=builder /root/.local /home/appuser/.local
+
+# Environment
+ENV PATH="/home/appuser/.local/bin:$PATH" \
+    PYTHONPATH="/home/appuser/.local/lib/python3.11/site-packages:$PYTHONPATH" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+# Streamlit configuration via environment variables
+# server.headless=true: required in containers (no browser to auto-open)
+# server.enableCORS=false: handled by our FastAPI middleware
+# server.enableXsrfProtection=false: not needed for internal dashboard
+ENV STREAMLIT_SERVER_PORT=8501 \
+    STREAMLIT_SERVER_ADDRESS=0.0.0.0 \
+    STREAMLIT_SERVER_HEADLESS=true \
+    STREAMLIT_BROWSER_GATHER_USAGE_STATS=false \
+    STREAMLIT_THEME_BASE=light
+
+# Copy frontend application code
+COPY frontend/ /app/frontend/
+
+# Create Streamlit config directory
+RUN mkdir -p /app/.streamlit && \
+    chown -R appuser:appgroup /app /home/appuser
+
+# Write Streamlit config file
+# This configures Streamlit server settings within the container
+RUN cat > /app/.streamlit/config.toml << 'EOF'
+[server]
+port = 8501
+address = "0.0.0.0"
+headless = true
+enableCORS = false
+enableXsrfProtection = false
+maxUploadSize = 10
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+base = "light"
+primaryColor = "#1f77b4"
+EOF
+
+# Switch to non-root user
+USER appuser
+
+EXPOSE 8501
+
+# Streamlit health check
+# streamlit has a /_stcore/health endpoint built in
+HEALTHCHECK \
+    --interval=30s \
+    --timeout=10s \
+    --retries=3 \
+    --start-period=30s \
+    CMD curl -f http://localhost:8501/_stcore/health || exit 1
+
+# Streamlit startup command
+# Run from /app/frontend directory so page imports work correctly
+WORKDIR /app/frontend
+CMD ["streamlit", "run", "app.py", \
+     "--server.port=8501", \
+     "--server.address=0.0.0.0"]

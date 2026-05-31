@@ -1,0 +1,65 @@
+# docker-compose.test.yml
+# Run tests in isolation:
+# docker compose -f docker-compose.test.yml up --abort-on-container-exit
+
+version: "3.9"
+
+services:
+
+  # Isolated MongoDB for tests — separate from dev database
+  mongodb_test:
+    image: mongo:7.0
+    container_name: career_mongodb_test
+    ports:
+      - "27018:27017"   # Different host port to avoid conflict with dev
+    environment:
+      MONGO_INITDB_DATABASE: career_platform_test
+    healthcheck:
+      test: >
+        mongosh --quiet --eval
+        "db.adminCommand('ping').ok"
+        localhost:27017/career_platform_test || exit 1
+      interval: 10s
+      timeout:  5s
+      retries:  5
+      start_period: 20s
+    networks:
+      - test_net
+
+  # Test runner container
+  test_runner:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    container_name: career_test_runner
+    environment:
+      MONGODB_URL:     mongodb://mongodb_test:27017
+      MONGODB_DB_NAME: career_platform_test
+      PYTHONPATH:      /app
+    command: >
+      sh -c "
+        echo 'Waiting for MongoDB...' &&
+        sleep 5 &&
+        echo 'Running tests...' &&
+        cd /app &&
+        python -m pytest tests/ -v
+          --tb=short
+          --junit-xml=/app/test-results/results.xml
+          -p no:warnings
+      "
+    depends_on:
+      mongodb_test:
+        condition: service_healthy
+    volumes:
+      - ./tests:/app/tests
+      - test_results:/app/test-results
+    networks:
+      - test_net
+
+networks:
+  test_net:
+    driver: bridge
+
+volumes:
+  test_results:
+    driver: local

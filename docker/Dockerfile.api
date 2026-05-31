@@ -1,0 +1,168 @@
+# docker/Dockerfile.api
+
+# ═══════════════════════════════════════════════════════════════════════
+# STAGE 1: BUILDER
+# Installs all Python dependencies including those requiring compilation.
+# This stage is NOT included in the final image — only its outputs are.
+# ═══════════════════════════════════════════════════════════════════════
+
+# python:3.11 includes gcc, g++, make — needed for packages like PyMuPDF
+# that compile C extensions during pip install
+FROM python:3.11 AS builder
+
+# Set working directory for the build stage
+WORKDIR /build
+
+# Install system-level build dependencies
+# These are needed to compile C extensions in Python packages
+# --no-install-recommends: skip optional packages (smaller layer)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    g++ \
+    libffi-dev \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+    # rm: clean apt cache to reduce layer size
+
+# Copy ONLY requirements first
+# Docker caches this layer until requirements.txt changes
+# Separating from application code prevents pip reinstall on every code change
+COPY requirements.txt .
+
+# Install Python packages to a user-local directory
+# --user: installs to /root/.local instead of system Python
+#         → can be copied to runtime stage cleanly
+# --no-cache-dir: don't cache wheel files (reduces layer size)
+# --upgrade: ensure latest versions within specified constraints
+RUN pip install --user --no-cache-dir -r requirements.txt
+
+# Download spaCy English model
+# en_core_web_lg: large model with 685MB word vectors
+# Downloaded to /root/.local (same as pip --user)
+RUN python -m spacy download en_core_web_lg
+
+# Download NLTK data packages
+# -d /root/nltk_data: explicit directory (will be copied to runtime)
+# Packages: stopwords, punkt (tokenizer), wordnet (lemmatizer), averaged_perceptron_tagger
+RUN python -c "\
+import nltk; \
+nltk.download('stopwords',                 download_dir='/root/nltk_data'); \
+nltk.download('punkt',                     download_dir='/root/nltk_data'); \
+nltk.download('punkt_tab',                 download_dir='/root/nltk_data'); \
+nltk.download('wordnet',                   download_dir='/root/nltk_data'); \
+nltk.download('averaged_perceptron_tagger',download_dir='/root/nltk_data'); \
+print('NLTK data downloaded successfully')"
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# STAGE 2: RUNTIME
+# Minimal Python image with only what's needed to run the application.
+# Does NOT include gcc, g++, build tools — smaller and more secure.
+# ═══════════════════════════════════════════════════════════════════════
+
+# python:3.11-slim: Python with minimal OS packages (~130MB vs ~900MB full)
+FROM python:3.11-slim AS runtime
+
+# ── System dependencies for runtime ────────────────────────────────────
+# libgomp1: OpenMP runtime — required by some compiled packages (numpy, etc.)
+# curl:     Used in Docker HEALTHCHECK command
+# These are runtime deps (not build tools) so they belong in runtime stage
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgomp1 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# ── Create non-root user ───────────────────────────────────────────────
+# Running as root inside a container is a security risk
+# If the app is compromised, an attacker gets root inside the container
+# Non-root user limits the blast radius of a container escape
+RUN groupadd --gid 1001 appgroup && \
+    useradd  --uid 1001 --gid appgroup --shell /bin/bash --create-home appuser
+
+# ── Set working directory ──────────────────────────────────────────────
+# /app is the conventional application directory in containers
+WORKDIR /app
+
+# ── Copy installed Python packages from builder stage ─────────────────
+# COPY --from=builder: copies files from a previous build stage
+# /root/.local: where pip --user installed everything in builder stage
+# This transfers ~1.5GB of Python packages without any build tools
+COPY --from=builder /root/.local /home/appuser/.local
+
+# Copy NLTK data downloaded in builder
+COPY --from=builder /root/nltk_data /home/appuser/nltk_data
+
+# ── Configure Python path ──────────────────────────────────────────────
+# PATH: add user-local bin directory (for installed CLI tools like uvicorn)
+# PYTHONPATH: tells Python where to find installed packages
+# PYTHONUSERBASE: redirects pip --user to appuser's home
+ENV PATH="/home/appuser/.local/bin:$PATH" \
+    PYTHONPATH="/home/appuser/.local/lib/python3.11/site-packages:$PYTHONPATH" \
+    PYTHONUSERBASE="/home/appuser/.local" \
+    NLTK_DATA="/home/appuser/nltk_data"
+
+# ── Python runtime settings ────────────────────────────────────────────
+# PYTHONUNBUFFERED=1: disable output buffering
+#   → print() and logging output appears immediately in Docker logs
+#   → without this, logs may be delayed or lost on crash
+# PYTHONDONTWRITEBYTECODE=1: don't create .pyc files
+#   → slightly faster container startup, cleaner filesystem
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+# ── Copy application source code ──────────────────────────────────────
+# This layer changes most often → place LAST to maximize cache hits
+# Copy in dependency order: configs → source modules → entry point
+COPY backend/  /app/backend/
+COPY nlp/      /app/nlp/
+COPY scripts/  /app/scripts/
+COPY .env      /app/.env
+
+# ── Create data directories ────────────────────────────────────────────
+# These directories are used at runtime for uploaded files and logs
+RUN mkdir -p /app/data/sample_resumes /app/data/sample_jobs /app/logs
+
+# ── Set ownership ──────────────────────────────────────────────────────
+# Give appuser ownership of everything in /app
+# Must be done as root (current user) before switching to appuser
+RUN chown -R appuser:appgroup /app /home/appuser
+
+# ── Switch to non-root user ────────────────────────────────────────────
+USER appuser
+
+# ── Expose port ────────────────────────────────────────────────────────
+# EXPOSE: documents which port the container listens on
+# Does NOT publish the port — docker-compose ports: does that
+EXPOSE 8000
+
+# ── Health check ──────────────────────────────────────────────────────
+# interval:    Time between health checks (30 seconds)
+# timeout:     How long to wait for health check response (10 seconds)
+# retries:     Failed checks before container is "unhealthy" (3)
+# start_period:Grace period for startup before health checks begin (60s)
+#              FastAPI needs time to load spaCy model (2-5 seconds)
+HEALTHCHECK \
+    --interval=30s \
+    --timeout=10s \
+    --retries=3 \
+    --start-period=60s \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# ── Startup command ────────────────────────────────────────────────────
+# CMD vs ENTRYPOINT:
+#   ENTRYPOINT: always executed, hard to override
+#   CMD:        default command, easily overridden with docker run <cmd>
+#
+# JSON array form (exec form) vs string form (shell form):
+#   Shell form:  CMD uvicorn backend.main:app  → /bin/sh -c "uvicorn ..."
+#   Exec form:   CMD ["uvicorn", ...]           → directly executes uvicorn
+#   Exec form is preferred: proper signal handling (SIGTERM for graceful shutdown)
+#
+# --host 0.0.0.0: listen on all interfaces (required in containers)
+# --workers 1:    single worker (scale by adding containers, not workers)
+# --no-access-log: disable uvicorn's access log (we have our own middleware)
+CMD ["uvicorn", "backend.main:app", \
+     "--host", "0.0.0.0", \
+     "--port", "8000", \
+     "--workers", "1", \
+     "--log-level", "info"]

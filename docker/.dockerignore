@@ -1,0 +1,62 @@
+# docker/.dockerignore
+# Also place a copy at project root: .dockerignore
+
+# ── Python artifacts ──────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ── Virtual environments ───────────────────────────────────────────────
+# These are LARGE (2-4GB) and must never be in the build context
+venv/
+.venv/
+env/
+ENV/
+
+# ── Test artifacts ────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# ── IDE and OS files ───────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ── Git ───────────────────────────────────────────────────────────────
+.git/
+.gitignore
+
+# ── Docker files (no need to copy into container) ─────────────────────
+docker/
+docker-compose*.yml
+Dockerfile*
+
+# ── Data and uploads (mounted as volumes instead) ─────────────────────
+data/db/
+data/uploads/
+
+# ── Logs ──────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Documentation ─────────────────────────────────────────────────────
+docs/
+*.md
+README*
+
+# ── Environment files with secrets ───────────────────────────────────
+# Exclude all .env files from build context
+# Environment variables are passed via docker-compose env_file
+.env*
+!.env.example

@@ -1,0 +1,235 @@
+# docker-compose.yml
+
+# Compose file format version — 3.9 supports all modern features
+version: "3.9"
+
+# ═══════════════════════════════════════════════════════════════════════
+# SERVICES
+# Each service becomes one (or more) running containers
+# ═══════════════════════════════════════════════════════════════════════
+services:
+
+  # ─────────────────────────────────────────────────────────────────────
+  # SERVICE 1: MongoDB
+  # Official MongoDB 7.0 image — no Dockerfile needed
+  # ─────────────────────────────────────────────────────────────────────
+  mongodb:
+    # Use official MongoDB image from Docker Hub
+    # 7.0: specific version tag (never use 'latest' in production)
+    image: mongo:7.0
+
+    # Container name: overrides auto-generated name
+    # Makes docker logs, exec, etc. easier
+    container_name: career_mongodb
+
+    # Restart policy:
+    # unless-stopped: restart on failure or host reboot, not on manual stop
+    # Options: no | always | on-failure | unless-stopped
+    restart: unless-stopped
+
+    # Port mapping: host:container
+    # "27017:27017": localhost:27017 → container:27017
+    # Format string to prevent YAML from parsing as float
+    ports:
+      - "27017:27017"
+
+    # Volume: persist MongoDB data across container restarts
+    # mongodb_data: → /data/db: named volume → MongoDB data directory
+    volumes:
+      - mongodb_data:/data/db
+      # Optional: custom MongoDB config
+      # - ./docker/mongod.conf:/etc/mongod.conf:ro
+
+    # Environment variables passed to container
+    # MONGO_INITDB_DATABASE: creates this DB on first startup
+    environment:
+      MONGO_INITDB_DATABASE: career_platform
+      # For production, add:
+      # MONGO_INITDB_ROOT_USERNAME: admin
+      # MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+
+    # Health check: verify MongoDB is accepting connections
+    # mongosh: MongoDB shell — ping command confirms DB is responsive
+    # --quiet: suppress connection info in output
+    healthcheck:
+      test: >
+        mongosh --quiet --eval
+        "db.adminCommand('ping').ok"
+        localhost:27017/career_platform
+        || exit 1
+      interval: 30s    # Check every 30 seconds
+      timeout:  10s    # Fail if no response within 10 seconds
+      retries:  5      # Mark unhealthy after 5 consecutive failures
+      start_period: 40s # Wait 40s before first check (MongoDB startup time)
+
+    # Connect to the private backend network
+    networks:
+      - backend_net
+
+    # Resource limits — prevent MongoDB from consuming all memory
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+
+  # ─────────────────────────────────────────────────────────────────────
+  # SERVICE 2: FastAPI Backend
+  # Built from our custom Dockerfile.api
+  # ─────────────────────────────────────────────────────────────────────
+  api:
+    # Build configuration: where to find Dockerfile and build context
+    build:
+      # context: directory sent to Docker daemon as build context
+      # "." = project root (so COPY backend/ works relative to project root)
+      context: .
+      # dockerfile: path to Dockerfile relative to context
+      dockerfile: docker/Dockerfile.api
+      # Build-time arguments (ARG in Dockerfile)
+      args:
+        - PYTHON_VERSION=3.11
+
+    container_name: career_api
+
+    restart: unless-stopped
+
+    # Map host port 8000 to container port 8000
+    ports:
+      - "8000:8000"
+
+    # Volume mounts:
+    # ./data:/app/data — share data directory (uploads, samples)
+    # No source code volume in production (baked into image)
+    # For development, uncomment source code volumes below
+    volumes:
+      - ./data:/app/data
+      # Development hot-reload (comment out for production):
+      # - ./backend:/app/backend
+      # - ./nlp:/app/nlp
+
+    # Environment variables for FastAPI container
+    # Overrides values in .env file baked into the image
+    environment:
+      # MongoDB URL uses service name "mongodb" — Docker DNS resolves this
+      # to the MongoDB container's IP on the backend_net network
+      MONGODB_URL: mongodb://mongodb:27017
+      MONGODB_DB_NAME: career_platform
+      API_HOST: 0.0.0.0
+      API_PORT: 8000
+      API_RELOAD: "false"         # Never hot-reload in containers
+      SPACY_MODEL: en_core_web_lg
+      MAX_FILE_SIZE_MB: 10
+      ATS_SCORE_THRESHOLD: 0.5
+      # Streamlit URL for CORS
+      API_BASE_URL: http://api:8000
+
+    # Load additional environment from file (secrets, etc.)
+    # Variables in env_file override those above
+    env_file:
+      - .env.docker
+
+    # Dependency ordering with health condition:
+    # api won't start until mongodb passes its health check
+    # condition: service_healthy — REQUIRES healthcheck in mongodb service
+    depends_on:
+      mongodb:
+        condition: service_healthy
+
+    # Health check for the API container
+    # Tests the /health endpoint we built in Module 8
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout:  10s
+      retries:  3
+      start_period: 60s  # spaCy model loading takes 2-5 seconds
+
+    networks:
+      - backend_net
+
+    deploy:
+      resources:
+        limits:
+          memory: 2G      # spaCy model uses ~700MB RAM
+        reservations:
+          memory: 1G
+
+
+  # ─────────────────────────────────────────────────────────────────────
+  # SERVICE 3: Streamlit Dashboard
+  # Built from our custom Dockerfile.streamlit
+  # ─────────────────────────────────────────────────────────────────────
+  streamlit:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.streamlit
+
+    container_name: career_streamlit
+
+    restart: unless-stopped
+
+    ports:
+      - "8501:8501"
+
+    environment:
+      # Streamlit connects to api service by service name
+      # "api" resolves to the FastAPI container's IP on backend_net
+      API_BASE_URL: http://api:8000
+      STREAMLIT_SERVER_PORT: 8501
+      STREAMLIT_SERVER_HEADLESS: "true"
+
+    env_file:
+      - .env.docker
+
+    # Streamlit depends on API being healthy before starting
+    depends_on:
+      api:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout:  10s
+      retries:  3
+      start_period: 30s
+
+    networks:
+      - backend_net
+
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# NETWORKS
+# ═══════════════════════════════════════════════════════════════════════
+networks:
+  backend_net:
+    # bridge: standard Docker network driver for single-host deployments
+    # Creates a virtual network; containers communicate by service name
+    driver: bridge
+
+    # ipam: IP Address Management configuration
+    ipam:
+      config:
+        # Subnet for this network
+        # Containers get IPs in 172.20.0.0/16 range
+        - subnet: 172.20.0.0/16
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# VOLUMES
+# ═══════════════════════════════════════════════════════════════════════
+volumes:
+  # Named volume for MongoDB data persistence
+  # Docker manages the actual location: /var/lib/docker/volumes/
+  # Data survives: container stop, restart, rebuild
+  # Data is lost only when: docker volume rm mongodb_data
+  mongodb_data:
+    driver: local

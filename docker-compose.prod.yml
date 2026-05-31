@@ -1,0 +1,108 @@
+# docker-compose.prod.yml
+# Production overrides — use with:
+# docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+version: "3.9"
+
+services:
+
+  mongodb:
+    # Production MongoDB with authentication enabled
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+      MONGO_INITDB_DATABASE:      career_platform
+
+    # Production logging: limit log size to prevent disk exhaustion
+    # max-size: maximum size of one log file
+    # max-file: number of log files to keep (rolling)
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+    # Additional backup volume for MongoDB data
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_backup:/backup
+
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.0"
+        reservations:
+          memory: 512M
+
+
+  api:
+    # In production: don't build, use a pre-built image from registry
+    # image: registry.yourcompany.com/career-platform/api:${VERSION}
+
+    # Production environment overrides
+    environment:
+      API_RELOAD: "false"           # Never reload in production
+      MONGODB_URL: >
+        mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/career_platform?authSource=admin
+      LOG_LEVEL: warning            # Reduce log verbosity in production
+
+    # Production: 2 API workers for better throughput
+    # (Adjust based on CPU cores available)
+    command:
+      - uvicorn
+      - backend.main:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8000"
+      - --workers
+      - "2"
+      - --log-level
+      - warning
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "10"
+
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: "2.0"
+        reservations:
+          memory: 2G
+
+      # Restart policy for production
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+
+
+  streamlit:
+    environment:
+      # In production, use the actual domain name
+      API_BASE_URL: ${API_PRODUCTION_URL:-http://api:8000}
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.0"
+
+
+volumes:
+  mongodb_data:
+    driver: local
+  mongodb_backup:
+    driver: local
