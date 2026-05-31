@@ -17,6 +17,8 @@ from backend.config import settings
 
 from backend.routers import upload, nlp
 
+from backend.routers import upload, nlp, skills
+
 # Logging
 import logging
 
@@ -82,6 +84,7 @@ app = FastAPI(
 # prefix="/api/v1" namespaces all routes for versioning
 app.include_router(upload.router, prefix="/api/v1")
 app.include_router(nlp.router, prefix="/api/v1")
+app.include_router(skills.router, prefix="/api/v1")
 
 
 # ── Health Check Endpoint ─────────────────────────────────────────────
