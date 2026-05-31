@@ -1,33 +1,27 @@
 # backend/main.py
 
-# FastAPI: the web framework class
-from fastapi import FastAPI
-
-# contextlib.asynccontextmanager: creates async context manager for lifespan
 from contextlib import asynccontextmanager
-
-# Our database manager
-from backend.database import db_manager
-
-# Our router modules
-from backend.routers import upload
-
-# Settings
-from backend.config import settings
-
-from backend.routers import upload, nlp
-
-from backend.routers import upload, nlp, skills
-
-# Add to imports in backend/main.py
-from backend.routers import upload, nlp, skills, jobs, scoring
-
-from backend.routers import upload, nlp, skills, jobs, scoring, candidates
-
-# Logging
 import logging
 
-# Configure root logger format
+from fastapi import FastAPI
+
+from backend.config import settings
+from backend.database import db_manager
+
+from backend.routers import (
+    upload,
+    nlp,
+    skills,
+    jobs,
+    scoring,
+    candidates,
+    admin
+)
+
+# --------------------------------------------------
+# Logging Configuration
+# --------------------------------------------------
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -35,97 +29,119 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+# --------------------------------------------------
+# Application Lifespan
+# --------------------------------------------------
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
-    FastAPI lifespan context manager.
-    
-    Code BEFORE yield: runs at application startup
-    Code AFTER yield:  runs at application shutdown
-    
-    This replaces the deprecated @app.on_event("startup") pattern.
-    Guarantees DB is connected before first request and disconnected cleanly.
-    """
-    # ── Startup ──────────────────────────────────────────────────────
-    logger.info("Starting AI Career Intelligence Platform API...")
-    db_manager.connect()
-    logger.info("Database connected. API ready.")
+    FastAPI lifespan handler.
 
-    # yield hands control to FastAPI to handle requests
+    Startup:
+        - Connect MongoDB
+        - Create indexes
+
+    Shutdown:
+        - Close MongoDB connection
+    """
+
+    logger.info("Starting AI Career Intelligence Platform API...")
+
+    try:
+        # Connect database
+        db_manager.connect()
+
+        # Initialize indexes if implemented
+        if hasattr(db_manager, "initialize_indexes"):
+            await db_manager.initialize_indexes()
+
+        logger.info(
+            "Database connected and indexes initialized successfully."
+        )
+
+    except Exception as e:
+        logger.exception(f"Startup failed: {e}")
+        raise
+
     yield
 
-    # ── Shutdown ─────────────────────────────────────────────────────
     logger.info("Shutting down API...")
-    db_manager.disconnect()
-    logger.info("Shutdown complete.")
 
+    try:
+        db_manager.disconnect()
+        logger.info("Database connection closed.")
 
-# Create FastAPI app instance
+    except Exception as e:
+        logger.exception(f"Shutdown error: {e}")
+
+# --------------------------------------------------
+# FastAPI Application
+# --------------------------------------------------
+
 app = FastAPI(
     title="AI Career Intelligence Platform",
     description="""
-    Production-grade ATS (Applicant Tracking System) API.
-    
-    ## Features
-    * **Resume Parsing**: Upload PDF and DOCX resumes
-    * **NLP Processing**: Extract skills, entities, and features
-    * **ATS Scoring**: TF-IDF + Cosine Similarity scoring
-    * **Candidate Ranking**: Objective candidate comparison
-    
-    ## Workflow
-    1. Upload resumes via `/upload/resume`
-    2. Create job descriptions via `/jobs`
-    3. Score resumes vs jobs via `/scoring`
-    4. View rankings via `/candidates`
-    """,
+Production-grade ATS and Candidate Intelligence Platform.
+
+Features:
+- Resume Upload & Parsing
+- NLP Processing
+- Skill Extraction
+- ATS Scoring
+- Candidate Ranking
+- Job Management
+- Analytics Dashboard
+- Admin Operations
+""",
     version="1.0.0",
-    lifespan=lifespan  # Register our lifespan handler
+    lifespan=lifespan
 )
 
+# --------------------------------------------------
+# Router Registration
+# --------------------------------------------------
 
-# ── Register Routers ──────────────────────────────────────────────────
-# Each router handles a domain of the application
-# prefix="/api/v1" namespaces all routes for versioning
 app.include_router(upload.router, prefix="/api/v1")
 app.include_router(nlp.router, prefix="/api/v1")
 app.include_router(skills.router, prefix="/api/v1")
-app.include_router(jobs.router,    prefix="/api/v1")
+app.include_router(jobs.router, prefix="/api/v1")
 app.include_router(scoring.router, prefix="/api/v1")
 app.include_router(candidates.router, prefix="/api/v1")
+app.include_router(admin.router, prefix="/api/v1")
 
+# --------------------------------------------------
+# System Endpoints
+# --------------------------------------------------
 
-# ── Health Check Endpoint ─────────────────────────────────────────────
-@app.get("/health", tags=["System"])
-async def health_check():
-    """
-    Health check endpoint for Docker, load balancers, and monitoring.
-    Returns 200 if API is running. Production systems check this every 30s.
-    """
-    return {
-        "status": "healthy",
-        "api_version": "1.0.0",
-        "service": "AI Career Intelligence Platform"
-    }
-
-
-# ── Root Endpoint ─────────────────────────────────────────────────────
 @app.get("/", tags=["System"])
 async def root():
-    """API root — redirects users to documentation."""
     return {
         "message": "AI Career Intelligence Platform API",
+        "version": "1.0.0",
         "docs": "/docs",
         "health": "/health"
     }
 
 
-# ── Development Server ────────────────────────────────────────────────
+@app.get("/health", tags=["System"])
+async def health_check():
+    return {
+        "status": "healthy",
+        "service": "AI Career Intelligence Platform",
+        "version": "1.0.0"
+    }
+
+# --------------------------------------------------
+# Development Entry Point
+# --------------------------------------------------
+
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(
-        "backend.main:app",        # module:app_variable string
+        "backend.main:app",
         host=settings.API_HOST,
         port=settings.API_PORT,
-        reload=settings.API_RELOAD  # Hot reload in development
+        reload=settings.API_RELOAD
     )
