@@ -1,5 +1,3 @@
-# backend/models/ranking_models.py
-
 # pydantic: data validation and schema definition
 from pydantic import BaseModel, Field
 
