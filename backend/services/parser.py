@@ -1,6 +1,5 @@
 # backend/services/parser.py
 
-# fitz: PyMuPDF's Python interface for reading PDF files
 # PyMuPDF is one of the fastest PDF libraries available in Python
 import fitz  # PyMuPDF
 
