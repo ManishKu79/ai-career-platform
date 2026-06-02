@@ -1,4 +1,4 @@
-# frontend/pages/5_Analytics.py
+
 
 import streamlit as st
 import pandas as pd
