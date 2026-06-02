@@ -1,4 +1,4 @@
-# backend/middleware/error_handler.py
+
 
 # fastapi: exception types and response helpers
 from fastapi import FastAPI, Request, status
