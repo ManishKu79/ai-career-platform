@@ -1,7 +1,5 @@
 # backend/middleware/cors.py
 
-# fastapi.middleware.cors: FastAPI's CORS middleware implementation
-# Built on Starlette's CORSMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 
 # FastAPI app type for type hints
