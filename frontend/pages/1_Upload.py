@@ -1,4 +1,4 @@
-# frontend/pages/1_Upload.py
+
 
 import streamlit as st
 import pandas as pd
