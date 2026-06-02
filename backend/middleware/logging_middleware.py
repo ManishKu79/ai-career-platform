@@ -1,4 +1,4 @@
-# backend/middleware/logging_middleware.py
+
 
 # starlette.middleware.base: base class for writing custom ASGI middleware
 # BaseHTTPMiddleware wraps the ASGI app and provides a clean interface
