@@ -1,5 +1,3 @@
-# backend/routers/pipeline.py
-
 # fastapi: all required imports for a complex router
 from fastapi import (
     APIRouter,
