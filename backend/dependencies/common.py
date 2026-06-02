@@ -1,6 +1,5 @@
 # backend/dependencies/common.py
 
-# fastapi: dependency injection tools
 from fastapi import Query, Depends, HTTPException, status
 
 # motor database type
