@@ -1,4 +1,4 @@
-# frontend/pages/4_Rankings.py
+
 
 import streamlit as st
 import pandas as pd
