@@ -1,4 +1,4 @@
-# frontend/components/api_client.py
+
 
 # requests: synchronous HTTP client library
 # Used instead of httpx because Streamlit is synchronous
