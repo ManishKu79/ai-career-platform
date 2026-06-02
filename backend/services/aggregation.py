@@ -1,4 +1,3 @@
-# backend/services/aggregation.py
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from typing import List, Dict, Any, Optional
