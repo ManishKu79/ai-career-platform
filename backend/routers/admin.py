@@ -1,5 +1,3 @@
-# backend/routers/admin.py
-
 from fastapi import APIRouter, HTTPException, Depends, Query
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from backend.database import get_database, db_manager
