@@ -130,7 +130,7 @@ class NLPFeatures(BaseModel):
     # Total token count after stop word removal
     total_tokens: int = 0
 
-    # Unique token count (vocabulary size)
+    # 
     unique_tokens: int = 0
 
     # Lexical diversity: unique_tokens / total_tokens
