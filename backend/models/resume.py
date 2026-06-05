@@ -1,4 +1,4 @@
-# backend/models/resume.py
+
 
 # pydantic: data validation library — BaseModel is the base class for all schemas
 from pydantic import BaseModel, Field
