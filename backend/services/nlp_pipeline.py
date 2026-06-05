@@ -1,4 +1,4 @@
-# backend/services/nlp_pipeline.py
+
 
 # spaCy: industrial-strength NLP library
 # We use it for: tokenization, POS tagging, NER, lemmatization, noun chunks
