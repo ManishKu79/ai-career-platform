@@ -1,4 +1,4 @@
-# backend/services/db_service.py
+
 
 # motor type for annotations
 from motor.motor_asyncio import AsyncIOMotorDatabase
