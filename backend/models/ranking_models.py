@@ -1,4 +1,4 @@
-# pydantic: data validation and schema definition
+
 from pydantic import BaseModel, Field
 
 # typing: type annotations
