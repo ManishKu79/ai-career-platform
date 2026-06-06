@@ -1,4 +1,4 @@
-# nlp/skill_taxonomy.py
+
 
 """
 Master skill taxonomy for the AI Career Intelligence Platform.
