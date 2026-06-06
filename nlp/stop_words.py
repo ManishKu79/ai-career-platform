@@ -1,4 +1,4 @@
-# nlp/stop_words.py
+
 
 # We extend spaCy's built-in English stop words with resume-specific terms
 # spacy.lang.en.stop_words contains ~300+ standard English stop words
