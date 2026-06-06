@@ -1,4 +1,4 @@
-# frontend/app.py
+
 
 import streamlit as st
 from components.api_client import client, API_BASE_URL
