@@ -1,4 +1,4 @@
-# tests/test_ats_scorer.py
+
 
 import pytest
 from backend.services.ats_scorer import ATSScorer
