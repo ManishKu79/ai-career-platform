@@ -1,4 +1,4 @@
-# tests/test_skill_extractor.py
+
 
 import pytest
 from backend.services.skill_extractor import SkillExtractor
