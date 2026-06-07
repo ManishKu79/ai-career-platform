@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+
 # scripts/docker_build.sh
 # Builds all Docker images for the AI Career Platform
 # Usage: ./scripts/docker_build.sh [--no-cache] [--tag VERSION]
