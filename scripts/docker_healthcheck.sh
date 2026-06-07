@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+
 # scripts/docker_healthcheck.sh
 # Verifies all services are healthy
 # Usage: ./scripts/docker_healthcheck.sh
