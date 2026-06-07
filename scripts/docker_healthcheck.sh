@@ -1,5 +1,4 @@
 
-# scripts/docker_healthcheck.sh
 # Verifies all services are healthy
 # Usage: ./scripts/docker_healthcheck.sh
 # Exit code: 0 = all healthy, 1 = one or more unhealthy
