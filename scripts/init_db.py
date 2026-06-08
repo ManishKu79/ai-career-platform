@@ -1,4 +1,4 @@
-# scripts/init_db.py
+
 
 """
 Database initialization script.
