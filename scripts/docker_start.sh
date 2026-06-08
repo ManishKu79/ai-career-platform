@@ -1,5 +1,4 @@
 
-# scripts/docker_start.sh
 # Starts the AI Career Platform with health verification
 # Usage: ./scripts/docker_start.sh [--build] [--prod]
 
