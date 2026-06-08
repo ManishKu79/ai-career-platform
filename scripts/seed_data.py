@@ -1,4 +1,4 @@
-# scripts/seed_data.py
+
 
 """
 Seeds the database with sample job descriptions.
