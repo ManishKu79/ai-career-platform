@@ -1,5 +1,4 @@
 
-# Starts the AI Career Platform with health verification
 # Usage: ./scripts/docker_start.sh [--build] [--prod]
 
 set -euo pipefail
