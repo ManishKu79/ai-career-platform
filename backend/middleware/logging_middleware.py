@@ -1,6 +1,4 @@
 
-
-# starlette.middleware.base: base class for writing custom ASGI middleware
 # BaseHTTPMiddleware wraps the ASGI app and provides a clean interface
 # for intercepting requests and responses
 from starlette.middleware.base import BaseHTTPMiddleware
