@@ -1,5 +1,4 @@
 
-# for intercepting requests and responses
 from starlette.middleware.base import BaseHTTPMiddleware
 
 # starlette.requests: Request object with headers, body, query params
