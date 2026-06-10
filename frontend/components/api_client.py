@@ -1,6 +1,4 @@
 
-
-# requests: synchronous HTTP client library
 # Used instead of httpx because Streamlit is synchronous
 import requests
 
