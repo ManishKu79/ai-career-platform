@@ -1,5 +1,4 @@
 
-# Used instead of httpx because Streamlit is synchronous
 import requests
 
 # typing: type annotations
