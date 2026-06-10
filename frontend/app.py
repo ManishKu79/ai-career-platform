@@ -2,8 +2,6 @@
 
 import streamlit as st
 from components.api_client import client, API_BASE_URL
-
-# ── Page Configuration ─────────────────────────────────────────────────
 # Must be the FIRST Streamlit command in the script
 st.set_page_config(
     page_title="AI Career Intelligence Platform",
