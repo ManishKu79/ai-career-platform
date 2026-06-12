@@ -4,7 +4,6 @@ FROM python:3.11 AS builder
 
 WORKDIR /build
 
-# installing heavy NLP packages (spaCy, NLTK) that aren't needed
 COPY requirements.txt .
 
 # Install only frontend-relevant packages
