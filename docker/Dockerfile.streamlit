@@ -1,6 +1,4 @@
 
-
-# Installs Streamlit and frontend dependencies
 # ═══════════════════════════════════════════════════════════════════════
 
 FROM python:3.11 AS builder
