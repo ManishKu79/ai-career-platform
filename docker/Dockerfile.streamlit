@@ -3,7 +3,7 @@
 FROM python:3.11 AS builder
 
 WORKDIR /build
-# We create a minimal requirements file for the frontend to avoid
+
 # installing heavy NLP packages (spaCy, NLTK) that aren't needed
 COPY requirements.txt .
 
